@@ -14,6 +14,10 @@
      git clone https://github.com/hans-chrstn/yt-terminal
      cd yt-terminal
      chmod +x ./yt # File that you got from this repo
+
+     To test, run ./yt -t
+     If player succeeds,
+     Then just run ./yt or ./yt -v for video
    ```
 
    - Usage
@@ -30,7 +34,7 @@
 <details>
   <summary>Help improve yt-terminal!</summary>
 
-   - If you'd like to suggest fixes or a new widget, feel free to [open an issue](https://github.com/hans-chrstn/yt-terminal/issues/new)
+   - If you'd like to suggest fixes, feel free to [open an issue](https://github.com/hans-chrstn/yt-terminal/issues/new)
 </details>
 
 > [!WARNING]

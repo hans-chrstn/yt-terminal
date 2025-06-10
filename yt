@@ -12,8 +12,8 @@ usage() {
 }
 
 check_drm() {
-  local video_id=$1
-  if yt-dlp -F "https://www.youtube.com/watch?v=$video_id" 2>&1 | grep -qi "drm protected"; then
+  local id=$1
+  if yt-dlp -F "https://www.youtube.com/watch?v=$id" 2>&1 | grep -qi "drm protected"; then
     echo "This video is DRM protected and cannot be played."
     exit 1
   fi
@@ -30,10 +30,10 @@ mpv_opts=()
 while getopts "vVAth" opt; do
   case $opt in
     v) VIDEO_MODE=1 ;;
-    V) DEBUG_VIDEO=1 ;;
+    V) DEBUG_VIDEO=1 VIDEO_MODE=1 ;;
     A) DEBUG_AUDIO=1 ;;
     # p) PLAYLIST_ID=
-    t) TEST_MODE=1 ;;
+    t) TEST_MODE=1 VIDEO_MODE=1;;
     h) usage ;;
     *) break ;;
   esac
@@ -42,9 +42,11 @@ done
 shift $((OPTIND -1))
 if [[ $TEST_MODE -eq 1 ]]; then
   # Hardcode a known video ID or URL
-  video_id="dQw4w9WgXcQ"  # Rickroll test
+  id="dQw4w9WgXcQ"  # Rickroll test
+  title="Rick Astley - Never Gonna Give You Up"
+  channel="Rick Astley"
+  type="VIDEO"
   mpv_opts+=( "--msg-level=all=debug" "--log-file=mpv-test.log")
-  VIDEO_MODE=1  # Force video mode, or set as needed
 else
   read -rp "Search YouTube: " query
   query=$(echo "$query" | sed -e 's/ /+/g')

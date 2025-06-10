@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+usage() {
+  echo -e "\033[1mUsage:\033[0m $0 [options]"
+  echo "  -v                  Play as video with mpv (default is audio-only)"
+  # echo "  -p <playlistID>     Play a playlist"
+  echo "  -V                  Debug video"
+  echo "  -A                  Debug audio"
+  echo "  -t                  Test mode (skips search and selection)"
+  echo "  -h                  Show this help message"
+  exit 0
+}
+
+check_drm() {
+  local video_id=$1
+  if yt-dlp -F "https://www.youtube.com/watch?v=$video_id" 2>&1 | grep -qi "drm protected"; then
+    echo "This video is DRM protected and cannot be played."
+    exit 1
+  fi
+}
+
+
+VIDEO_MODE=0
+# PLAYLIST_ID=0
+DEBUG_VIDEO=0
+DEBUG_AUDIO=0
+TEST_MODE=0
+mpv_opts=(--quiet --msg-level=ffmpeg=no)
+
+while getopts "vVAth" opt; do
+  case $opt in
+    v) VIDEO_MODE=1 ;;
+    V) DEBUG_VIDEO=1 ;;
+    A) DEBUG_AUDIO=1 ;;
+    # p) PLAYLIST_ID=
+    t) TEST_MODE=1 ;;
+    h) usage ;;
+    *) break ;;
+  esac
+done
+
+shift $((OPTIND -1))
+if [[ $TEST_MODE -eq 1 ]]; then
+  # Hardcode a known video ID or URL
+  video_id="dQw4w9WgXcQ"  # Rickroll test
+  mpv_opts+=( "--msg-level=all=debug" "--log-file=mpv-test.log")
+  VIDEO_MODE=1  # Force video mode, or set as needed
+else
+  read -rp "Search YouTube: " query
+  query=$(echo "$query" | sed -e 's/ /+/g')
+
+  json=$(curl -s "https://www.youtube.com/results?search_query=$query" | \
+    sed -n '/ytInitialData = {/,$p' | \
+    sed '1s/.*ytInitialData = //; :a; N; $!ba; s/};\s*<\/script>.*/}/')
+
+  # Check if the JSON extraction succeeded
+  if [[ -z "$json" || "$json" == "}" ]]; then
+    echo "Failed to extract YouTube search data."
+    exit 1
+  fi
+
+  # unfortunately limited to 18 which idk how to fix
+  results=$(echo "$json" | jq -r '
+    .contents?
+    .twoColumnSearchResultsRenderer?.primaryContents? 
+    .sectionListRenderer?.contents[]? 
+    .itemSectionRenderer?.contents[]? 
+      | (if has("videoRenderer") then
+          .videoRenderer
+          | [.ownerText.runs[0].text // "Unknown Channel",
+              .title.runs[0].text,
+              .videoId,
+              "VIDEO"]
+        elif has("channelRenderer") then
+          .channelRenderer
+          | [.title.simpleText,
+              .title.simpleText,
+              .channelId,
+              "CHANNEL"]
+        else empty end)
+      | @tsv
+  ' | while IFS=$'\t' read -r channel title id type; do
+      printf "%-20.20s\t%-60.60s\t%s\t%s\n" "$channel" "$title" "$id" "$type"
+  done)
+
+  if [[ -z "$results" ]]; then
+    echo "Nothing found."
+    exit 1
+  fi
+
+  selected=$(echo "$results" | fzf --prompt="Select video: " --delimiter='\t' --with-nth=1,2,4)
+
+  if [[ -z "$selected" ]]; then
+    echo "No selection made."
+    exit 1
+  fi
+
+  channel=$(echo "$selected" | cut -f1)
+  title=$(echo "$selected" | cut -f2)
+  id=$(echo "$selected" | cut -f3)
+  type=$(echo "$selected" | cut -f4)
+
+
+fi
+
+
+if [[ $DEBUG_AUDIO -eq 1 && $DEBUG_VIDEO -eq 1 ]]; then
+  mpv_opts+=( "--msg-level=audio=debug" "--msg-level=video=debug" "--log-file=mpv-debug.log" )
+elif [[ $DEBUG_AUDIO -eq 1 ]]; then
+  mpv_opts+=( "--msg-level=audio=debug" "--log-file=mpv-audio-debug.log" )
+elif [[ $DEBUG_VIDEO -eq 1 ]]; then
+  mpv_opts+=( "--msg-level=video=debug" "--log-file=mpv-video-debug.log" )
+else
+  :
+fi
+
+case "$type" in
+  VIDEO)
+    check_drm "$id"
+    echo "Playing video \"$title\" by $channel"
+    if [[ $VIDEO_MODE -eq 1 ]]; then
+      mpv "https://www.youtube.com/watch?v=$id" "${mpv_opts[@]}" --ytdl-format="bestvideo[height<=480]+bestaudio/best/best"
+    else
+      mpv "https://www.youtube.com/watch?v=$id" "${mpv_opts[@]}" --no-video --ytdl-format="bestaudio/best"
+    fi
+    ;;
+  # PLAYLIST)
+  #   echo "Fetching playlist \"$title\" by $channel"
+  #   playlist_videos=$(yt-dlp --flat-playlist -J "https://www.youtube.com/playlist?list=$id" | \
+  #     jq -r '.entries[] | "\(.title)\t\(.id)"')
+  #
+  #   if [[ -z "$playlist_videos" ]]; then
+  #     echo "No videos found in playlist."
+  #     exit 1
+  #   fi
+  #
+  #   # Pick a video from playlist
+  #   selected_vid=$(echo "$playlist_videos" | fzf --delimiter=$'\t' --with-nth=1 --prompt="Select video from playlist: ")
+  #
+  #   if [[ -z "$selected_vid" ]]; then
+  #     echo "No video selected from playlist."
+  #     exit 1
+  #   fi
+  #
+  #   vid_title=$(echo "$selected_vid" | cut -f1)
+  #   vid_id=$(echo "$selected_vid" | cut -f2)
+  #
+  #   echo "Playing \"$vid_title\" from playlist"
+  #   if [[ $VIDEO_MODE -eq 1 ]]; then
+  #     mpv "https://www.youtube.com/watch?v=$vid_id" "${mpv_opts[@]}" --ytdl-format="bestvideo[height<=480]+bestaudio/best/best"
+  #   else
+  #     mpv "https://www.youtube.com/watch?v=$vid_id" "${mpv_opts[@]}" --no-video --ytdl-format="bestaudio/best"
+  #   fi
+  #   ;;
+  CHANNEL)
+    echo "Opening channel \"$channel\" in browser"
+    xdg-open "https://www.youtube.com/channel/$id"
+    ;;
+  *)
+    echo "Unknown type: $type"
+    exit 1
+    ;;
+esac
+
+
+

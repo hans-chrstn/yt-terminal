@@ -9,6 +9,14 @@
 <details>
   <summary>Instructions</summary>
 
+   - Requirements
+     - bash
+     - curl
+     - sed
+     - jq
+     - mpv
+     - yt-dlp
+
    - Installation
    ```installation
      git clone https://github.com/hans-chrstn/yt-terminal

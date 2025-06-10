@@ -111,7 +111,7 @@ elif [[ $DEBUG_AUDIO -eq 1 ]]; then
 elif [[ $DEBUG_VIDEO -eq 1 ]]; then
   mpv_opts+=( "--msg-level=video=debug" "--log-file=mpv-video-debug.log" )
 else
-  mpv_opts+=( "--quiet --msg-level=ffmpeg=no" )
+  mpv_opts+=( "--quiet" "--msg-level=ffmpeg=no" )
 fi
 
 case "$type" in
